@@ -13,3 +13,5 @@ function SumLess ($numer){
 
     return $sum;
 }
+
+var_dump(SumLess(123456));
