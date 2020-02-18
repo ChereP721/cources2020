@@ -1,24 +1,47 @@
 <?php
-function Scan($dir)
-{
-    static $fnames = array();
-    if($d=opendir($dir))
-    {
-        while(false !== ($file = readdir($d)))
-        {
-            if ($file == '.' || $file == '..')
-                continue;
-            if(is_dir($dir . DIRECTORY_SEPARATOR . $file))
-                Scan($dir . DIRECTORY_SEPARATOR . $file);
-            else
-                if (pathinfo( $file, PATHINFO_EXTENSION )==='php')
+declare(strict_types=1);
 
-                    $fnames[] = $file;
-        }
-        closedir($d);
+/**
+ * @param string $dir
+ * @param array $buffer
+ * @return array
+ */
+function findPhpFilesInDir(string $dir, array &$buffer): array
+{
+    if (!is_dir($dir)) {
+        $buffer[] = $dir . ' - is not a directory!';
+        return [];
     }
-    return $fnames;
+
+    if (!$dh = opendir($dir)) {
+        $buffer[] = 'Can not open a directory: ' . $dir . '';
+        return [];
+    }
+
+    static $phpFiles = [];
+    while ($file = readdir($dh)) {
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+        if (is_dir($subDir = $dir . DIRECTORY_SEPARATOR . $file)) {
+            findPhpFilesInDir($subDir);
+            continue;
+        }
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'php') {
+            $phpFiles[] = $file;
+        }
+    }
+    closedir($dh);
+
+    return $phpFiles;
 }
 
+$buffer = [];
+$phpFiles = findPhpFilesInDir('dir', $buffer);
+
 echo '<pre>';
-var_dump(Scan('dir'));
+print_r([
+    'files' => $phpFiles,
+    'info' => $buffer,
+]);
+echo '</pre>';
