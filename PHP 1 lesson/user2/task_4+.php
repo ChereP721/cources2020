@@ -1,58 +1,82 @@
 <?php
 
-function searchPhp ($dir):array // Рекурсивный обход каталогов, поиск файлов с расширением php
-{
-    $list = array_diff(scandir($dir), ['.', '..']); // Выкидываем указатели на текущий и вышестоящий каталог
-    $result = [];
-    foreach ($list as $item) {
-        $path = $dir.DIRECTORY_SEPARATOR.$item;
-        if (is_dir($path)) {
-            $result = array_merge($result,searchPhp($path));
-        }
-        else {
-            $ext = explode('.',$item);// Просмотр расширения файла
-            if ($ext[1] == 'php'){
-                $result[] = $path;
-            }
-        }
-    }
-    return $result;
-}
-
-function searchInclude($dir):array // Поиск файлов с вхождением 'include' и замена
-{
-    $includeFound=[];
-    $list = array_diff(scandir($dir), ['.', '..']); // Листинг директории, отбрасываем '.' и '..'
-    foreach ($list as $file){
-        $content = file($file);
-        foreach ($content as $key => $line){
-            $phrase = strpos($line,'include');
-            if (is_numeric($phrase)){ // Замена на содержимое файла в 'include'
-                $elm = explode ("'",$line);
-                $insFile = file($elm[1]);
-                unset ($insFile[0]);
-                array_splice($content,$key,1,$insFile);
-            }
-        }
-        $fp = fopen($file,'w'); //Перезапись модиф.файла
-        foreach($content as $str){
-            fwrite($fp,$str);
-        }
-        fclose($fp);
-    }
-    return $includeFound;
-}
-
 echo '<pre>';
-$selected = searchPhp( __DIR__); // Поиск и вывод на экран файлов с расширением php
-print_r($selected);
+$cDir = __DIR__;
+$sePar = DIRECTORY_SEPARATOR;
+$nDir = $cDir.$sePar.'_cache';
 
-foreach ($selected as $file){ // Копирование php-файлов из корневого каталога в '/_cache'
-    $isRoot = dirname($file,1); // Предполагается что каталог уже создан
-    $name = basename($file);
-    if ($isRoot == __DIR__){
-        copy($file,$isRoot.DIRECTORY_SEPARATOR."_cache".DIRECTORY_SEPARATOR.$name);
+if (!file_exists($nDir)){
+    if (!mkdir($nDir)){
+        die ('Не удалось создать директорию');
     }
 }
-searchInclude(__DIR__.DIRECTORY_SEPARATOR.'_cache'); // Поиск 'include' в скопированныйх в '/_cache' файлах
-// и вставка содержимого 'include' файлов
+
+// Копируем файлы в директорию '_cache'
+
+$dh = opendir($cDir);
+while (false !==($entry = readdir($dh))){
+
+    $aFile = $cDir.$sePar.$entry;
+
+    if (is_dir($aFile)){
+        continue;
+    }
+
+    if ($aFile == __FILE__){
+        continue;
+    }
+
+    if (pathinfo($aFile, PATHINFO_EXTENSION) == 'php'){
+        copy($aFile,$nDir.$sePar.$entry);
+    }
+}
+closedir($dh);
+echo "Copying done!\n";
+
+// Ищем файлы с include в каталоге '_cache'
+
+$ch = opendir($nDir);
+while (false !==($entry = readdir($ch))) {
+    $substDone = false;
+    $rFile = file($nDir.$sePar.$entry);
+    $inclFound = preg_grep("/include '.*'/",$rFile); // Определяем наличие 'include' в файле
+//    print_r($inclFound)."\n";
+
+    while (!empty($inclFound)){
+
+        $key = array_key_first($inclFound);
+        $filename = explode("'",$inclFound[$key]); // Определяем имя подключаемого файла
+        $filename = $nDir.$sePar.$filename[1];
+//        echo $filename[1]."\n";
+        if (file_exists($filename)) {
+            echo "File to include ".$filename."\n";
+
+            $wFile = file($filename);unset($wFile[0]);   // Убираем тег '<?php' из начала файла
+            array_splice($rFile,$key,1,$wFile);
+            $inclFound = preg_grep("/include '.*'/",$rFile); // Обновляем массив значений 'include'
+        }
+        else{                                               // Производим замену 'include' содержимым файла
+            echo "File to include not found!\n";
+            unset($inclFound[$key]);                        // Удаляем запись о ненайденном файле из массива
+        }
+
+        $substDone = true;
+    }
+
+    if ($substDone){                                        // Проверяем, производились ли замены.
+        $fh = fopen($nDir.$sePar.$entry,'w');
+        foreach($rFile as $line){
+            fwrite($fh,$line);
+        }
+        fclose($fh);
+        echo "Search and replace  done!";
+    }
+}
+closedir($ch);
+if ($substDone === false){
+    echo "No files to include.\n";
+}
+
+
+
+
